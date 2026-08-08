@@ -1,0 +1,18 @@
+[project]
+name = "csctool"
+version = "0.1.0"
+description = "Change Samsung CSC (region/carrier code) without root or data wipe, via the AT modem interface."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+dependencies = ["pyserial>=3.5"]
+
+[project.scripts]
+csctool = "csctool:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["csctool"]
