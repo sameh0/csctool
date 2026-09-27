@@ -84,16 +84,21 @@ sudo usermod -aG dialout $USER
 
 or run the command with `sudo`.
 
-## Tested devices
+## Device compatibility
 
-Samsung keeps tightening the AT interface, so real-world reports matter more than anything here:
+`csctool` works wherever Samsung exposes the AT modem interface through Test Mode (`*#0*#`). Coverage
+below is by series — there are no community test reports yet, so if you've run it on your phone, please
+open an issue with your model, firmware, and result:
 
-| Device | Android / One UI | From → To | Data kept? |
-|--------|------------------|-----------|------------|
-| _your device here_ | | | |
+| Series | Models | Status |
+|--------|--------|--------|
+| Galaxy S | S8 – S26 (2017–2026) | Awaiting reports |
+| Galaxy Z Fold | Fold – Z Fold 8 (2019–2026) | Awaiting reports |
+| Galaxy Z Flip | Z Flip – Z Flip 8 (2020–2026) | Awaiting reports |
+| Galaxy A | A0x – A9x, incl. A26/A36/A56 (2019–2026) | Awaiting reports |
 
-Tried it on your phone? Please open an issue with your model, firmware, and result — it helps everyone know
-what still works.
+Heads-up: the tool is proven on Android 9–11 era firmware. Samsung keeps tightening the AT interface, so
+newer One UI releases may block it — reports from recent models are especially valuable.
 
 ## Limits
 
