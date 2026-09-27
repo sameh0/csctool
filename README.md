@@ -1,7 +1,17 @@
 # csctool
 
-Change the CSC (region/carrier code) on a Samsung phone **without root and without tripping Knox** — a
-command-line equivalent of the "Change CSC" feature in the SamFW tool.
+Change the CSC (region/carrier code) on a Samsung phone **without root, without tripping Knox, and without
+running a closed-source binary on your phone** — an open-source command-line tool for Linux and macOS.
+
+## Why this exists
+
+The usual way to change CSC is a closed-source Windows `.exe` that talks to your phone over USB with full
+access. It works, but you can't see what it sends to your device — and if you're on Linux or macOS, you're
+out of luck entirely.
+
+`csctool` does the same job with nothing hidden: every AT command it sends is listed below, the whole tool
+is one readable Python file, and it runs natively on Linux and macOS. No Windows, no mystery binary, no
+account, no server phoning home.
 
 ## How it works
 
@@ -30,29 +40,22 @@ untouched).
 > If the answer contains `DATA_RESET_ON,TRUE`, the phone **will wipe user data** when the CSC changes.
 > Back up first either way.
 
-## Limits
-
-- Only CSCs **already inside the phone's bundle** can be activated. A code from a different bundle (e.g. a US
-  carrier variant) needs a full firmware flash via Odin.
-- Newer devices may factory-reset on CSC change (see the warning above).
-- Works on Android 9–11 era firmware. Newer One UI security patches may block the AT interface.
-- Back up first anyway — you are reconfiguring the device.
-- Some carrier features (e.g. a VoLTE profile) may not match your local network after the change.
-
-## Requirements
-
-- Linux or macOS
-- `adb` on PATH (Android platform-tools)
-- Python 3.8+ with `pyserial`
-- USB debugging enabled on the phone
-
 ## Install
 
 ```sh
-pipx install .          # from this directory
-# or
-pip install pyserial && python3 csctool.py <command>
+pipx install git+https://github.com/sameh0/csctool.git
 ```
+
+Or from source:
+
+```sh
+git clone https://github.com/sameh0/csctool.git
+cd csctool
+pipx install .
+```
+
+Requirements: Linux or macOS, `adb` on PATH (Android platform-tools), Python 3.8+, USB debugging enabled on
+the phone. `pyserial` is installed automatically as a dependency.
 
 ## Usage
 
@@ -80,6 +83,26 @@ sudo usermod -aG dialout $USER
 ```
 
 or run the command with `sudo`.
+
+## Tested devices
+
+Samsung keeps tightening the AT interface, so real-world reports matter more than anything here:
+
+| Device | Android / One UI | From → To | Data kept? |
+|--------|------------------|-----------|------------|
+| _your device here_ | | | |
+
+Tried it on your phone? Please open an issue with your model, firmware, and result — it helps everyone know
+what still works.
+
+## Limits
+
+- Only CSCs **already inside the phone's bundle** can be activated. A code from a different bundle (e.g. a US
+  carrier variant) needs a full firmware flash via Odin.
+- Newer devices may factory-reset on CSC change (see the warning above).
+- Works on Android 9–11 era firmware. Newer One UI security patches may block the AT interface.
+- Back up first anyway — you are reconfiguring the device.
+- Some carrier features (e.g. a VoLTE profile) may not match your local network after the change.
 
 ## Disclaimer
 
