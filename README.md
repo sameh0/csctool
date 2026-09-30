@@ -43,7 +43,7 @@ untouched).
 ## Install
 
 ```sh
-pipx install git+https://github.com/sameh0/csctool.git
+pipx install csctool
 ```
 
 Or from source:

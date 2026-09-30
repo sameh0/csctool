@@ -1,6 +1,6 @@
 [project]
 name = "csctool"
-version = "1.0.0"
+version = "1.0.1"
 description = "Change Samsung CSC (region code) without root and without tripping Knox — open-source CLI for Linux and macOS."
 readme = "README.md"
 license = { text = "MIT" }
