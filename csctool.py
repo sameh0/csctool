@@ -3,7 +3,8 @@
 
 Uses Samsung's AT modem interface exposed in Test Mode (*#0*#). Sends the
 pre-configurator command to activate a different CSC already present in the
-phone's multi-CSC firmware bundle. The device reboots; Knox is untouched.
+phone's multi-CSC firmware bundle, then requests a reboot. Neither reboot nor
+CSC activation is verified by this tool; Knox is untouched.
 Whether user data survives depends on the firmware (ro.omc.changetype) - many
 newer devices factory-reset on a sales-code change. Only CSCs shipped inside
 the phone's bundle can be activated - anything else needs a full firmware
@@ -13,6 +14,7 @@ Requires: adb on PATH, pyserial. Linux or macOS.
 """
 
 import argparse
+from dataclasses import dataclass
 import glob
 import os
 import re
@@ -189,8 +191,30 @@ def check_port_access(port):
         )
 
 
+REBOOT_COMMAND = "AT+CFUN=1,1"
+
+
+@dataclass(frozen=True)
+class ATResult:
+    command: str
+    reply: str
+    outcome: str
+
+
+def classify_reply(reply):
+    """Classify observed text, not device state; negative tokens take priority."""
+    if re.search(r"\bERROR\b", reply, re.IGNORECASE):
+        return "error"
+    if re.search(r"\bNA\b", reply, re.IGNORECASE):
+        # Samsung-specific NA is not treated as positive evidence, even with OK.
+        return "na"
+    if re.search(r"\bOK\b", reply, re.IGNORECASE):
+        return "acknowledged"
+    return "unconfirmed"
+
+
 def send_at_sequence(port, commands, verbose=True):
-    """Open the modem port and send each AT command, reading its reply."""
+    """Send requests and return observations; replies do not verify activation."""
     check_port_access(port)
     try:
         ser = serial.Serial(port, BAUD, timeout=2)
@@ -200,24 +224,64 @@ def send_at_sequence(port, commands, verbose=True):
     results = []
     with ser:
         ser.reset_input_buffer()
-        for i, cmd in enumerate(commands):
-            ser.write((cmd + "\r\n").encode())
-            ser.flush()
-            time.sleep(AT_DELAY)
-            reply = ser.read(ser.in_waiting or 256).decode(errors="replace").strip()
-            reply = reply.replace("\r", " ").replace("\n", " ").strip()
-            results.append((cmd, reply))
+        for cmd in commands:
+            is_reboot = cmd == REBOOT_COMMAND
+            sent = False
+            try:
+                written = ser.write((cmd + "\r\n").encode())
+                if written != len((cmd + "\r\n").encode()):
+                    raise serial.SerialException("incomplete command write")
+                sent = True
+                ser.flush()
+                time.sleep(AT_DELAY)
+                reply = ser.read(ser.in_waiting or 256).decode(errors="replace").strip()
+                reply = reply.replace("\r", " ").replace("\n", " ").strip()
+                result = ATResult(cmd, reply, classify_reply(reply))
+            except (serial.SerialException, OSError) as e:
+                if not is_reboot:
+                    die(f"serial communication failed during '{cmd}': {e}. "
+                        "Sequence stopped; device state is unverified.")
+                # A dropped port may accompany reboot, but is not proof of one.
+                result = ATResult(cmd, "", "disconnected" if sent else "send_failed")
+            results.append(result)
             if verbose:
-                status = reply or "(no reply)"
-                mark = green("OK") if "OK" in reply else (
-                    red("ERROR") if "ERROR" in reply else yellow("?")
-                )
+                status = result.reply or "(no reply)"
+                mark = (red(result.outcome) if result.outcome in ("error", "na")
+                        else yellow(result.outcome))
                 print(f"  -> {cmd:<24} {mark}  {status}")
-            # The reboot command drops the port; a missing reply there is normal.
-            is_reboot = cmd.startswith("AT+CFUN")
-            if "ERROR" in reply and not is_reboot:
-                die(f"modem rejected '{cmd}'. Aborting. Reply: {reply}")
+            if result.outcome in ("error", "na") and not is_reboot:
+                die(f"modem returned a negative response for '{cmd}'. "
+                    f"Aborting; device state is unverified. Reply: {result.reply}")
     return results
+
+
+def report_change_results(target, results):
+    """Present protocol observations without claiming reboot or active CSC."""
+    preconfig = next((r for r in results
+                      if r.command == f"AT+PRECONFG=2,{target}"), None)
+    if (preconfig and preconfig.outcome == "acknowledged"
+            and re.search(r"\+PRECONFG\s*:\s*2\s*,\s*OK\b",
+                          preconfig.reply, re.IGNORECASE)):
+        print(f"\nCSC configuration request for {target}: acknowledged by modem.")
+    else:
+        print(yellow(f"\nCSC configuration request for {target}: unconfirmed."))
+
+    reboot = next((r for r in results if r.command == REBOOT_COMMAND), None)
+    messages = {
+        "na": "modem returned NA (even if followed by OK).",
+        "error": "modem returned an error.",
+        "acknowledged": "modem returned OK; this is only an acknowledgement.",
+        "unconfirmed": "no conclusive reply received.",
+        "disconnected": "serial connection lost after write; reboot is unverified.",
+        "send_failed": "serial write failed; request delivery is unconfirmed.",
+    }
+    print(yellow("Reboot request: " + messages.get(
+        reboot.outcome if reboot else None, "no result available.")))
+    print("Reboot and active CSC have not been verified.")
+    print("If the phone has not rebooted, reboot it manually; do not repeat the CSC sequence")
+    print("solely because reboot is unconfirmed. The CSC request may already have applied.")
+    print("After boot completes, verify the active CSC in Settings > About phone >")
+    print("Software information > Service provider software version.")
 
 
 # --------------------------------------------------------------------------- #
@@ -229,7 +293,7 @@ def build_sequence(target):
         "AT+ACTIVATE=0,0,0",
         "AT+SWATD=1",
         f"AT+PRECONFG=2,{target}",
-        "AT+CFUN=1,1",
+        REBOOT_COMMAND,
     ]
 
 
@@ -313,7 +377,7 @@ def cmd_change(args):
     print(f"  Using {bold(port)}")
 
     print(bold("\nStep 3: confirm"))
-    print("  This activates a different CSC and " + bold("reboots") + " the phone.")
+    print("  This requests a different CSC and a reboot; activation is not verified.")
     changetype = getprop("ro.omc.changetype")
     if "DATA_RESET_ON,TRUE" in changetype.upper():
         print(red("  WARNING: this firmware factory-resets on CSC change "
@@ -326,10 +390,8 @@ def cmd_change(args):
             die("confirmation did not match. Aborted.")
 
     print(bold(f"\nStep 4: sending AT sequence -> {target}"))
-    send_at_sequence(port, build_sequence(target))
-    print(green(f"\nDone. Phone is rebooting into CSC {target}."))
-    print("After reboot, verify: Settings > About phone > Software information,")
-    print(f"or run: {ADB} shell getprop ril.sales_code")
+    results = send_at_sequence(port, build_sequence(target))
+    report_change_results(target, results)
 
 
 # --------------------------------------------------------------------------- #

@@ -24,11 +24,11 @@ AT+SWATD=0            disable the SW anti-theft guard
 AT+ACTIVATE=0,0,0     deactivate the current config
 AT+SWATD=1            re-enable the guard
 AT+PRECONFG=2,<CSC>   activate the target CSC
-AT+CFUN=1,1           reboot
+AT+CFUN=1,1           request reboot
 ```
 
-The phone reboots into the new region config. Knox stays intact (this is Samsung's own mechanism, bootloader
-untouched).
+The final command requests a reboot. Its reply does not verify that the phone rebooted or that the target
+CSC became active. Knox stays intact (this is Samsung's own mechanism, bootloader untouched).
 
 > **Warning — data loss is device-dependent.** On many older devices user data survives the switch, but newer
 > firmware often factory-resets on a sales-code change. Check before you run it:
@@ -72,6 +72,26 @@ Use `--port` to override.
 
 `change` walks you through it: it asks you to dial `*#0*#`, waits for the modem port to appear, confirms, then
 sends the AT sequence.
+
+### Interpreting the result
+
+`change` reports observations separately for the CSC configuration request and the reboot request.
+A command-specific `+PRECONFG:2,OK` acknowledges the configuration request; it does not verify activation.
+For the reboot request:
+
+- `NA` (including `+CFUN=1,1:NA` followed by `OK`) is not positive reboot evidence. The tool does not assume
+  what Samsung's proprietary `NA` means.
+- An error is reported as an error, even if the same reply contains `OK`.
+- A generic `OK` acknowledges the request but does not prove a reboot.
+- An empty or unrecognized reply leaves the request unconfirmed.
+- A serial disconnect after writing may accompany a reboot, but does not prove one. A failed write leaves
+  delivery unconfirmed.
+
+If the phone has not rebooted, reboot it manually. Do not repeat the CSC sequence solely because reboot is
+unconfirmed: the configuration request may already have applied. After boot completes, verify the active CSC
+in **Settings > About phone > Software information > Service provider software version**. An empty
+`ril.sales_code` property alone is not evidence that the change failed. The tool does not perform post-boot
+verification or automatically send another reboot command. Existing data-loss warnings still apply.
 
 ### Serial permissions (Linux)
 
